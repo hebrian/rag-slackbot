@@ -172,3 +172,11 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# RAG Slackbot-specific
+.env
+token.json
+credentials.json
+chroma_store/
+.vscode/
+archive/
