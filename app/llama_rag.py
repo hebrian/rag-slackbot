@@ -6,6 +6,15 @@ import chromadb
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.llms.openai import OpenAI
 from config import OPENAI_API_KEY
+import os
+import phoenix as px
+from llama_index.core import set_global_handler
+
+# Start the local Phoenix server UI
+px.launch_app()
+
+# Use LlamaIndex's integrated Phoenix handler
+set_global_handler("arize_phoenix")
 
 
 def create_qa_chain(documents=None):
