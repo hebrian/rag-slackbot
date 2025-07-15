@@ -60,32 +60,62 @@ def create_qa_chain():
     auto_retriever = VectorIndexAutoRetriever(
         index=index,
         vector_store_info=vector_store_info,
-        similarity_top_k=5,
+        similarity_top_k=8,
         verbose=True,
     )
+
+    def retrieve_chunks(query: str):
+        nodes = auto_retriever.retrieve(query)
+        return [
+            {
+                "text": node.get_content(),
+                "metadata": node.metadata,
+                "score": node.score
+            }
+            for node in nodes
+        ]
 
     # Wrap the auto-retriever in a FunctionTool
     # This tool will be used by the agent to retrieve documents based on user queries
     retrieval_tool = FunctionTool.from_defaults(
-        fn=lambda query: "\n\n".join(
-            [n.get_content() for n in auto_retriever.retrieve(query)]
-        ),
-        name="CYIAutoRetriever",
-        description="Retrieve CYI documents based on user queries. Supports filtering by program and year automatically."
+        fn=retrieve_chunks,
+        name="CYIChunkRetriever",
+        description="Retrieve relevant CYI document chunks with metadata based on user queries. Supports filtering by program and year automatically."
+    )
+
+    def summarize_chunks(chunks: list, question: str):
+        # Concatenate all chunk texts
+        context = "\n\n".join([c["text"] for c in chunks])
+        prompt = f"""
+        You are helping answer user questions about CYI documents.
+        Context:
+        {context}
+
+        Question: {question}
+        Provide a concise, clear answer based on the context.
+        """
+        return Settings.llm.complete(prompt).text
+    
+    synthesis_tool = FunctionTool.from_defaults(
+        fn=summarize_chunks,
+        name="CYISummarizer",
+        description="Summarize retrieved CYI document chunks to answer a specific question."
     )
 
     # Create the OpenAI agent with the auto-retriever tool
     agent = OpenAIAgent.from_tools(
-        tools=[retrieval_tool],
+        tools=[retrieval_tool, synthesis_tool],
         llm=Settings.llm,
         system_prompt="""
         You are a helpful assistant for Chinatown Youth Initiatives (CYI).
-        When the user asks questions, use the CYIAutoRetriever tool to retrieve documents.
-        If the user asks follow-up questions (e.g., "what about 2022?"), infer context from the prior query.
+        - First, use the CYIChunkRetriever tool to get relevant chunks.
+        - Evaluate if the chunks contain the answer.
+        - If they do, use CYISummarizer to generate a clean answer.
+        - If the chunks don't seem helpful, try refining your query and calling CYIChunkRetriever again.
+        - If no relevant documents are found, politely inform the user and ask for clarification.
+        - If the user asks follow-up questions (e.g., "what about 2022?"), infer context from the prior query.
         For example if the user asks "What was the major feedback from SLI 2024?" and then "What about 2022?",
         you should understand that the user is asking about the same program (SLI) but for a different year (2022).
-        Always synthesize retrieved content into a clear, concise answer.
-        If you cannot find relevant documents, politely ask the user to clarify the program or year.
         """,
         verbose=True,
     )
