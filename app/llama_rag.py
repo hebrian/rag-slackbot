@@ -102,17 +102,43 @@ def create_qa_chain():
         description="Summarize retrieved CYI document chunks to answer a specific question."
     )
 
+    from llama_index.core import SQLDatabase
+    from llama_index.core.query_engine import NLSQLTableQueryEngine
+    from sqlalchemy import create_engine
+
+    # Connect to your SQLite database
+    engine = create_engine("sqlite:///cyi_directory.db")
+    sql_database = SQLDatabase(engine, include_tables=["Alumni"])
+
+    # Create a query engine that handles natural language to SQL
+    sql_query_engine = NLSQLTableQueryEngine(
+        sql_database=sql_database,
+        tables=["Alumni"],
+        llm=Settings.llm
+    )
+
+    def sql_query_fn(user_query: str) -> str:
+        response = sql_query_engine.query(user_query)
+        return str(response)
+
+    sql_tool = FunctionTool.from_defaults(
+        fn=sql_query_fn,
+        name="ContactSQLQuery",
+        description="Answer structured contact directory questions using SQL.",
+    )
+
+
     # Create the OpenAI agent with the auto-retriever tool
     agent = OpenAIAgent.from_tools(
-        tools=[retrieval_tool, synthesis_tool],
+        tools=[retrieval_tool, synthesis_tool, sql_tool],
         llm=Settings.llm,
         system_prompt="""
         You are a helpful assistant for Chinatown Youth Initiatives (CYI).
-        - First, use the CYIChunkRetriever tool to get relevant chunks.
-        - Evaluate if the chunks contain the answer.
-        - If they do, use CYISummarizer to generate a clean answer.
-        - If the chunks don't seem helpful, try refining your query and calling CYIChunkRetriever again.
-        - If no relevant documents are found, politely inform the user and ask for clarification.
+        - Use CYIDirectorySQL to answer questions about alumni, programs, years, roles, and emails.
+        - Use CYIChunkRetriever for answering questions from reports or documents.
+        - Prefer CYIDirectorySQL for structured questions (e.g., "Who were the directors for SLI 2020?")
+        - Use CYISummarizer to generate a clean answer after using CYIDirectorySQL or CYIChunkRetriever
+        - If no relevant documents or answers are found, politely inform the user and ask for clarification.
         - If the user asks follow-up questions (e.g., "what about 2022?"), infer context from the prior query.
         For example if the user asks "What was the major feedback from SLI 2024?" and then "What about 2022?",
         you should understand that the user is asking about the same program (SLI) but for a different year (2022).
