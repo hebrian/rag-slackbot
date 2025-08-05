@@ -1,3 +1,4 @@
+from urllib import response
 import chromadb
 from llama_index.core import (
     VectorStoreIndex,
@@ -87,9 +88,16 @@ def create_qa_chain():
 
     def summarize_chunks(chunks_or_rows: list, question: str):
         # Create a context string from the retrieved chunks or rows
-        context = "\n\n".join(
-            [c["text"] if "text" in c else str(c) for c in chunks_or_rows]
-        )
+        # Handle both text chunks or SQL row dicts
+        if isinstance(chunks_or_rows[0], dict):
+            # SQL rows: format into a string table as needed
+            context = "\n".join(
+                ", ".join(f"{k}: {v}" for k, v in row.items()) for row in chunks_or_rows
+            )
+        else:
+            # Text chunks (fallback)
+            context = "\n\n".join([c["text"] for c in chunks_or_rows])
+
         prompt = f"""
         You are helping answer user questions about CYI documents.
         Context:
@@ -100,11 +108,6 @@ def create_qa_chain():
         """
         return Settings.llm.complete(prompt).text
     
-    # synthesis_tool = FunctionTool.from_defaults(
-    #     fn=summarize_chunks,
-    #     name="CYISummarizer",
-    #     description="Summarize retrieved CYI document chunks to answer a specific question."
-    # )
 
     from llama_index.core import SQLDatabase
     from llama_index.core.query_engine import NLSQLTableQueryEngine
@@ -114,11 +117,49 @@ def create_qa_chain():
     engine = create_engine("sqlite:///cyi_directory.db")
     sql_database = SQLDatabase(engine, include_tables=["Alumni"])
 
+    from llama_index.core.prompts import PromptTemplate
+
+    custom_sql_prompt = PromptTemplate(
+        """You are an expert at writing SQL queries. 
+        Here is the database schema:
+        {schema}
+        For the 'Alumni' table in the CYI directory database,
+        here are few things to keep in mind:
+        
+        Guidelines:
+        - "CYI" refers to the organization; do NOT filter Program = 'CYI'.
+        - "Chinatown Beautification Day" means Program = 'CBD'.
+        - "Chinatown Community Builders" means Program = 'CCB'.
+        - "Summer Leadership Institute" means Program = 'SLI'.
+        - "Community Leadership Program" means Program = 'CLP'.
+        - "Alumni" refers to contacts in any of the CYI programs.
+        - If the user says "CYI programs", "CYI" or "programs in CYI", you should query SLI, CCB, CBD, and CLP.
+        - If the user asks about "staff", map that to roles: Director, Coordinator, Facilitator, Community Mentor.
+        - Participants are not part of "staff".
+
+        Examples:
+        Q: Who are the staff for SLI 2020?
+        A: SELECT * FROM Alumni WHERE Program = 'SLI' AND Year = 2020 AND Role IN ('Director', 'Coordinator', 'Facilitator', 'Community Mentor')
+
+        Q: Who are the coordinators for CYI in 2023?
+        A: SELECT * FROM Alumni WHERE Year = 2023 AND Role = 'Coordinator'
+
+        Output instructions:
+        - ONLY return the raw SQL query.
+        - Do NOT include explanations, preambles, markdown formatting, or commentary.
+        - Your response must start with SELECT or WITH.
+
+        User Question: {query_str}
+        SQL Query:"""
+    )
+
     # Create a query engine that handles natural language to SQL
     sql_query_engine = NLSQLTableQueryEngine(
         sql_database=sql_database,
         tables=["Alumni"],
-        llm=Settings.llm
+        llm=Settings.llm,
+        text_to_sql_prompt=custom_sql_prompt,
+        sql_output_key="sql_query",
     )
 
     def sql_query_fn(user_query: str) -> str:
@@ -128,7 +169,8 @@ def create_qa_chain():
         
         print("\n Generated SQL Query:")
         print(sql_query_str)
-        return summarize_chunks(rows, user_query)
+        return str(response)
+        #return summarize_chunks(rows, user_query)
 
     sql_summary_tool = FunctionTool.from_defaults(
         fn=sql_query_fn,
