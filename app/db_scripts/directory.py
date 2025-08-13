@@ -11,12 +11,12 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapi
 def load_contacts_sheet():
     creds = Credentials.from_authorized_user_file("token.json", SCOPES)
     gc = gspread.authorize(creds)
-    sheet = gc.open("CYI Directory").sheet1
+    sheet = gc.open("Sample CYI Directory").sheet1
     rows = sheet.get_all_records()
     return pd.DataFrame(rows)
 
 contacts_df = load_contacts_sheet()
-
+print(f"Loaded {len(contacts_df)} rows from Google Sheet.")
 print(contacts_df.head())
 
 # Write to SQLite
