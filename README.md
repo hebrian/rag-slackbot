@@ -2,6 +2,9 @@
 
 > Agentic Retrieval‑Augmented Generation (RAG) chatbot that helps Chinatown Youth Initiatives (CYI) staff query organizational knowledge across Google Drive documents and structured directories.
 
+![Slack Bot Demo](figures/slackbot-demo.gif)
+
+
 <!-- Badges (optional) -->
 <!-- [![CI](https://img.shields.io/github/actions/workflow/status/<org>/<repo>/ci.yml)]() [![License](https://img.shields.io/badge/license-MIT-black.svg)]() -->
 
