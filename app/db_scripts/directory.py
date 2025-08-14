@@ -11,7 +11,7 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapi
 def load_contacts_sheet():
     creds = Credentials.from_authorized_user_file("token.json", SCOPES)
     gc = gspread.authorize(creds)
-    sheet = gc.open("Sample CYI Directory").sheet1
+    sheet = gc.open("CYI Directory").sheet1
     rows = sheet.get_all_records()
     return pd.DataFrame(rows)
 

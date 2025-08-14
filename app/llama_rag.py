@@ -120,7 +120,7 @@ def create_qa_chain():
     from llama_index.core.prompts import PromptTemplate
 
     custom_sql_prompt = PromptTemplate(
-        """You are an expert at writing SQL queries. 
+        """You are an expert at writing SQL queries. Do not write any new tables to the database.
         Here is the database schema:
         {schema}
         For the 'Alumni' table in the CYI directory database,
